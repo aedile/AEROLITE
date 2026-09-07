@@ -23,6 +23,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <math.h>
+#include "audio_hal.h"
 
 static const char *TAG = "INPUT";
 #define PIN_BTN_BOOT GPIO_NUM_9
@@ -85,10 +86,29 @@ void input_init(void)
     ESP_LOGI(TAG, "input ready (IMU %s); neutral pose is captured on the first read and on each coin", imu_ok ? "ok" : "missing");
 }
 
+
+/* Holding the button for three seconds toggles the sound off and on. This is a thing people
+ * wear places, and some of those places need to be quiet. */
+#define HOLD_MUTE_US 3000000
+static int64_t mute_down_since;
+static bool mute_armed, mute_fired;
+
+static void mute_gesture(bool boot, int64_t now)
+{
+    if (boot && !mute_armed) { mute_armed = true; mute_fired = false; mute_down_since = now; }
+    if (!boot) { mute_armed = false; return; }
+    if (!mute_fired && now - mute_down_since >= HOLD_MUTE_US) {
+        mute_fired = true;
+        audio_set_mute(!audio_get_mute());
+        ESP_LOGI("INPUT", "sound %s", audio_get_mute() ? "off" : "on");
+    }
+}
+
 void input_update(ast_input_t *in)
 {
     int64_t now = esp_timer_get_time();
     bool boot = gpio_get_level(PIN_BTN_BOOT) == 0;
+    mute_gesture(boot, now);
     bool pwr = gpio_get_level(PIN_BTN_PWR) == 0;
 
     /* The button is passed through as a level, exactly as the cabinet wires it: the game does
