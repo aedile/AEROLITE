@@ -48,21 +48,32 @@ static int8_t rot_dir;                   /* -1 left, +1 right, 0 centred */
 static bool thrusting;
 
 /* angles of gravity, in degrees: lr = within the panel plane, ud = out of it */
-static void read_angles(float *lr, float *ud)
+/*
+ * One reading, and whether it can be trusted. These angles are the direction of gravity within
+ * the panel's plane and how far out of that plane it lies, and they only mean anything while
+ * the medal is being held up: lying flat on a desk, gravity points straight out of the screen
+ * and the in-plane angle is noise. Zeroing on a reading like that - which is exactly what
+ * happened, because the first one was taken at boot with the medal on a desk - sets a centre
+ * you were never holding, and leaves a control that works in one direction and not the other.
+ */
+static bool read_angles(float *lr, float *ud)
 {
     int16_t ax, ay, az;
     qmi8658_read_accel(&ax, &ay, &az);
     float in_plane = sqrtf((float)ax * ax + (float)ay * ay);
     *lr = atan2f((float)ay, (float)ax) * 57.2958f;
     *ud = atan2f((float)az, in_plane) * 57.2958f;
+    return in_plane > 1.2f * fabsf((float)az);      /* held up, not lying down */
 }
 
-static void capture_neutral(void)
+static bool capture_neutral(void)
 {
-    if (!imu_ok) return;
-    read_angles(&neutral_lr, &neutral_ud);
+    float lr, ud;
+    if (!imu_ok || !read_angles(&lr, &ud)) return false;   /* try again next time */
+    neutral_lr = lr; neutral_ud = ud;
     have_neutral = true;
     rot_dir = 0; thrusting = false;
+    return true;
 }
 
 static inline float wrap_deg(float d)
@@ -144,16 +155,17 @@ void input_update(ast_input_t *in)
     in->coin1 = 0; in->start1 = 0;
     switch (coin_seq) {
         case 1: in->coin1 = 1; if (el > 100000) coin_seq = 2; break;
-        case 2: if (el > 500000) coin_seq = 3; break;
+        case 2: if (el > 500000) { coin_seq = 3; capture_neutral(); }  /* settled into playing posture */
+            break;
         case 3: in->start1 = 1; if (el > 600000) coin_seq = 0; break;
         default: break;
     }
 
-    if (imu_ok && now - imu_last_us >= IMU_PERIOD_US) {
-        imu_last_us = now;
-        if (!have_neutral) capture_neutral();
-        float lr, ud;
-        read_angles(&lr, &ud);
+    float lr, ud;
+    bool imu_due = imu_ok && now - imu_last_us >= IMU_PERIOD_US;
+    if (imu_due) imu_last_us = now;
+    /* nothing is captured or acted on until the medal is actually being held up */
+    if (imu_due && read_angles(&lr, &ud) && (have_neutral || capture_neutral())) {
         float roll = wrap_deg(lr - neutral_lr) * ROT_SIGN;
         float pitch = wrap_deg(ud - neutral_ud) * THRUST_SIGN;
         dbg_roll = roll; dbg_pitch = pitch;
