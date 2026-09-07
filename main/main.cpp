@@ -13,6 +13,7 @@
 #include "render.h"
 #include "input.h"
 #include "audio_hal.h"
+#include "launcher_handback.h"
 
 static const char *TAG = "AEROLITE";
 /* 1.512 MHz / 24576 cycles = 61.523 Hz */
@@ -20,6 +21,10 @@ static const int64_t FRAME_US = 1000000LL * AST_CYCLES_PER_FRAME / AST_CPU_CLOCK
 
 extern "C" void app_main(void)
 {
+    /* Before anything else: if we were chain-booted from the menu, make sure the
+     * next reset goes back to it rather than here. */
+    launcher_handback();
+
     ESP_LOGI(TAG, "AEROLITE starting, free heap %lu", (unsigned long)esp_get_free_heap_size());
     display_init();
     display_set_backlight(DISPLAY_BRIGHTNESS_ACTIVE);
