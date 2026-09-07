@@ -13,7 +13,7 @@
 #include "render.h"
 #include "input.h"
 #include "audio_hal.h"
-#include "launcher_handback.h"
+#include "medalboot.h"
 
 static const char *TAG = "AEROLITE";
 /* 1.512 MHz / 24576 cycles = 61.523 Hz */
@@ -21,9 +21,12 @@ static const int64_t FRAME_US = 1000000LL * AST_CYCLES_PER_FRAME / AST_CPU_CLOCK
 
 extern "C" void app_main(void)
 {
-    /* Before anything else: if we were chain-booted from the menu, make sure the
-     * next reset goes back to it rather than here. */
-    launcher_handback();
+    /*
+     * FIRST LINE, before anything that can fail. This points the boot partition back at the
+     * MINIMAME launcher, so a panic, a watchdog bite or a brownout lands in the menu instead
+     * of boot-looping a broken game.
+     */
+    medalboot_game_startup();
 
     ESP_LOGI(TAG, "AEROLITE starting, free heap %lu", (unsigned long)esp_get_free_heap_size());
     display_init();
@@ -40,6 +43,8 @@ extern "C" void app_main(void)
     render_init();
     input_init();
     audio_init();
+    /* far enough in to be sure this image works: stop the launcher counting attempts */
+    medalboot_game_running();
     ESP_LOGI(TAG, "ready, free heap %lu", (unsigned long)esp_get_free_heap_size());
 
     int64_t last_us = esp_timer_get_time(), last_report = last_us, owed_us = 0;
