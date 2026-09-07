@@ -1,0 +1,4 @@
+[mapping:emu]
+archive: libemu.a
+entries:
+    asteroids (noflash)

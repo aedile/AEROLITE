@@ -1,0 +1,19 @@
+build/
+build_docker/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+managed_components/
+# ROMs are not distributable
+asteroid/
+asteroid.zip
+roms/
+main/roms/*.h
+host/harness
+host/harness_*
+host/out*/
+*.ppm
+*.png
+*.wav
+.DS_Store
+__pycache__/
